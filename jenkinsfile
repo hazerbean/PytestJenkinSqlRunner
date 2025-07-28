@@ -3,9 +3,9 @@ pipeline {
 
     // User-defined parameters for test packs, sub-packs, and environment
     parameters {
-        string(name: 'TEST_PACKS', defaultValue: '', description: 'Comma-separated list of test packs to run, e.g., CAL,RAL,IDL_HOP3')
-        string(name: 'SUB_PACKS', defaultValue: '', description: 'Comma-separated list of sub-packs to run independently, e.g., IDL_HOP3_AQRS,IAL_BIFF')
-        string(name: 'TEST_ENVIRONMENT', defaultValue: 'R1', description: 'Name of Test Environment, default is R1')
+        string(name: 'TEST_PACKS', defaultValue: '', description: 'Comma-separated list of test packs to run')
+        string(name: 'SUB_PACKS', defaultValue: '', description: 'Comma-separated list of sub-packs to run independently, e.g')
+        string(name: 'TEST_ENVIRONMENT', defaultValue: 'R1', description: 'Name of Test Environment')
         choice(name: 'EXEC_THREADS', choices: ['1','2','3','4','5','6','7','8','9','10'], description: 'Number of Parralel Threads')
         string(name: 'BRANCH', defaultValue: 'develop', description: 'Name of Branch (Case Sensitive), default is develop')
     }
@@ -13,7 +13,7 @@ pipeline {
     // Environment variables for email, database, and Jenkins run
     environment {
         BASE_DIR = 'tests'  // Base directory for all test packs
-        EMAIL_TO = 'bhushan.bhaskar@boi.com,vasanth.sekar@boi.com,monali.jadhav@boi.com,praveena.peddineni@boi.com,sakshi.patil@boi.com'
+        EMAIL_TO = 'your email here'
         TERADATA_HOST = 'tdprep01'
         TDWALLET_USERNAME = 'DEVOPS_USR_PP_1'
         TDWALLET_PASSWORD = '$$tdwallet(DEVOPS_USR_PP_1_p)'
@@ -41,7 +41,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checkout latest code from the repo'
-                git branch: "${params.BRANCH}", url: 'https://bitbucket.devops.boicssp.net/scm/edw/pytest-bdd-test-framework.git'
+                git branch: "${params.BRANCH}", url: 'your repo'
             }
         }
 
@@ -77,10 +77,10 @@ pipeline {
                 sh 'pytest-bdd-venv/Scripts/activate.bat'
 
                 echo '... Upgrade pip if necessary'
-                sh 'python3102 -m pip install --upgrade pip -i https://artifactory.boigroup.net/artifactory/api/pypi/boi-pypi/simple --user'
+                sh 'python3102 -m pip install --upgrade pip --user'
 
                 echo '... Install dependencies'
-                sh 'python3102 -m pip install -r requirements.txt -i https://artifactory.boigroup.net/artifactory/api/pypi/boi-pypi/simple --user'
+                sh 'python3102 -m pip install -r requirements.txt --user'
             }
         }
 
@@ -282,7 +282,7 @@ def sendSummaryEmail(resultsMap) {
         </table>
         <p>For more information on the run execution please see the Jenkins Page for the Allure report links on there:</p>
         <ul>
-            <li><a href="https://jenkins-ta.boigroup.net/job/EDW/job/Pytest-BDD-Test-Framework/${env.BUILD_NUMBER}/">Jenkins </a></li>
+            <li><a href="https://jenkins-ta.net/${env.BUILD_NUMBER}/">Jenkins </a></li>
         </ul>
         <p>Kind Regards,Test Team</p>
         </body>
