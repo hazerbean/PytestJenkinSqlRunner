@@ -1,0 +1,302 @@
+pipeline {
+    agent { label 'AMF' }  // Run on the AMF agent
+
+    // User-defined parameters for test packs, sub-packs, and environment
+    parameters {
+        string(name: 'TEST_PACKS', defaultValue: '', description: 'Comma-separated list of test packs to run, e.g., CAL,RAL,IDL_HOP3')
+        string(name: 'SUB_PACKS', defaultValue: '', description: 'Comma-separated list of sub-packs to run independently, e.g., IDL_HOP3_AQRS,IAL_BIFF')
+        string(name: 'TEST_ENVIRONMENT', defaultValue: 'R1', description: 'Name of Test Environment, default is R1')
+        choice(name: 'EXEC_THREADS', choices: ['1','2','3','4','5','6','7','8','9','10'], description: 'Number of Parralel Threads')
+        string(name: 'BRANCH', defaultValue: 'develop', description: 'Name of Branch (Case Sensitive), default is develop')
+    }
+
+    // Environment variables for email, database, and Jenkins run
+    environment {
+        BASE_DIR = 'tests'  // Base directory for all test packs
+        EMAIL_TO = 'bhushan.bhaskar@boi.com,vasanth.sekar@boi.com,monali.jadhav@boi.com,praveena.peddineni@boi.com,sakshi.patil@boi.com'
+        TERADATA_HOST = 'tdprep01'
+        TDWALLET_USERNAME = 'DEVOPS_USR_PP_1'
+        TDWALLET_PASSWORD = '$$tdwallet(DEVOPS_USR_PP_1_p)'
+        JENKINS_RUN = "True"
+        JAVA_HOME = "C:/Program Files/Java/jdk1.8.0_151"
+    }
+
+    stages {
+        // Debug to display the parameter values for easier troubleshooting
+        stage('Debug Parameter Values') {
+            steps {
+                echo "TEST_PACKS value: ${params.TEST_PACKS}"
+                echo "SUB_PACKS value: ${params.SUB_PACKS}"
+                echo "TEST_ENVIRONMENT value: ${params.TEST_ENVIRONMENT}"
+                echo "EXEC_THREADS: ${params.EXEC_THREADS}"
+                echo "BRANCH: ${params.BRANCH}"
+            
+                script {
+                    resultsMap = [:]
+                }
+            }
+        }
+
+        // Checkout latest code from the repository
+        stage('Checkout') {
+            steps {
+                echo 'Checkout latest code from the repo'
+                git branch: "${params.BRANCH}", url: 'https://bitbucket.devops.boicssp.net/scm/edw/pytest-bdd-test-framework.git'
+            }
+        }
+
+        // Set build name and description dynamically based on selected test packs/sub-packs
+        stage('Set Build Name') {
+            steps {
+                script {
+                    def packs = params.TEST_PACKS ? params.TEST_PACKS.tokenize(',') : []
+                    def sub_packs = params.SUB_PACKS ? params.SUB_PACKS.tokenize(',') : []
+                    def packsLabel = packs.join("-")
+                    def subPacksLabel = sub_packs.join("-")
+                    def buildLabel = packsLabel ? "Packs: ${packsLabel}" : ""
+                    buildLabel += subPacksLabel ? " Sub Packs: ${subPacksLabel}" : ""
+                    if (params.BRANCH != "develop") {
+                        buildLabel += "--${params.BRANCH}"
+                    }
+                    currentBuild.displayName = "${BUILD_NUMBER} - ${buildLabel}"
+                    currentBuild.description = "${BUILD_NUMBER} - ${buildLabel}"
+                }
+            }
+        }
+
+        // Install dependencies and prepare the environment
+        stage('Install dependencies') {
+            steps {
+                echo '... Confirm Python version'
+                sh 'python3102 --version'
+
+                echo '... Create virtual environment'
+                sh 'python3102 -m venv pytest-bdd-venv'
+
+                echo '... Activate the virtual environment'
+                sh 'pytest-bdd-venv/Scripts/activate.bat'
+
+                echo '... Upgrade pip if necessary'
+                sh 'python3102 -m pip install --upgrade pip -i https://artifactory.boigroup.net/artifactory/api/pypi/boi-pypi/simple --user'
+
+                echo '... Install dependencies'
+                sh 'python3102 -m pip install -r requirements.txt -i https://artifactory.boigroup.net/artifactory/api/pypi/boi-pypi/simple --user'
+            }
+        }
+
+        // Run selected test packs and sub-packs with dynamic paths
+        stage('Run Selected Packs') {
+            steps {
+                script {
+                    def packs = params.TEST_PACKS ? params.TEST_PACKS.replaceAll("\\s","").tokenize(',') : []
+                    def sub_packs = params.SUB_PACKS ? params.SUB_PACKS.replaceAll("\\s","").tokenize(',') : []
+
+                    // Run each selected test pack
+                    packs.each { pack ->
+                        def testPath = "${BASE_DIR}/${pack}_Tests/"
+                        echo "Running tests in ${testPath}"
+                       
+                        // Run tests with allure-results for each pack
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            sh "python3102 -m pytest --db-env=${params.TEST_ENVIRONMENT} -p no:allure-pytest ${testPath} -v --gherkin-terminal-reporter -n ${params.EXEC_THREADS} --alluredir target/${pack}_Tests/allure-results --clean-alluredir"
+                        }
+
+                        //  Process test results after execution
+                        def results = sh(script: "python3102  src/utilities/modify_allure_results.py --path=target/${pack}_Tests/allure-results", returnStdout: true).trim()
+                        resultsMap[pack] = readJSON text: results
+                        echo "${pack} Results ${results}"
+                        echo "${pack} JSON Read Results ${resultsMap}"
+                    }
+
+                    // Run each selected sub-pack
+                    sub_packs.each { sub_pack ->
+                        def pack_for_subpack = sub_pack.substring(0, sub_pack.indexOf('_'))
+                        def testPath = "${BASE_DIR}/${pack_for_subpack}_Tests/${sub_pack}_Tests/"
+                        echo "Running Subpack from ${testPath}"
+
+                        // Run tests with allure-results for each sub-pack
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') { 
+                            sh "python3102 -m pytest --db-env=${params.TEST_ENVIRONMENT} -p no:allure-pytest ${testPath} -v --gherkin-terminal-reporter -n ${params.EXEC_THREADS} --alluredir target/${pack_for_subpack}_Tests/${sub_pack}_Tests/allure-results --clean-alluredir"
+                        }
+
+                        //  Process test results for sub-pack
+                        def results = sh(script: "python3102 src/utilities/modify_allure_results.py --path=target/${pack_for_subpack}_Tests/${sub_pack}_Tests/allure-results", returnStdout: true).trim()
+                        resultsMap[sub_pack] = readJSON text: results
+                        echo "${sub_pack} Results ${results}"
+                        echo "${sub_pack} JSON Read Results ${resultsMap}"
+                    }
+
+                    // Add the summary to Jenkins Overview Page
+                    addSummaryToJenkins(resultsMap)
+                    //  Send Email Summary after all tests are completed
+                    sendSummaryEmail(resultsMap)
+                }
+            }
+        }
+    }
+
+    //  Post-Processing: Generate Allure Reports and Send Summary Email
+    post {
+        always {
+            script {
+                def packs = params.TEST_PACKS.tokenize(',')
+                def sub_packs = params.SUB_PACKS ? params.SUB_PACKS.tokenize(',') : []
+
+                // Generate Allure reports dynamically and add links to Jenkins summary
+                packs.each { pack ->
+                    def allureResultsPath = "target/${pack}_Tests/allure-results"
+                    echo "Pack for Pack: ${pack}"
+                    echo "Allure results path: ${allureResultsPath}"
+                    generateAllureReport(allureResultsPath, pack)  //- UNCOMMENT SECTION AFTER AZURE CLI TOOLS ADDED TO WORKER NODE ++ Comment out all 3 following lines
+                    // allure includeProperties: false,
+                    // reportBuildPolicy: 'ALWAYS',
+                    // results: [[path: "${allureResultsPath}"]]
+                }
+
+                sub_packs.each { sub_pack ->
+                    def pack_for_subpack = sub_pack.substring(0, sub_pack.indexOf('_'))
+                    def allureResultsPath = "target/${pack_for_subpack}_Tests/${sub_pack}_Tests/allure-results"
+                    echo "Pack for Subpack: ${pack_for_subpack}"
+                    echo "Allure results path: ${allureResultsPath}"
+                    generateAllureReport(allureResultsPath, sub_pack)  //- UNCOMMENT SECTION AFTER AZURE CLI TOOLS ADDED TO WORKER NODE ++ Comment out all 3 following lines
+                    // allure includeProperties: false,
+                    // reportBuildPolicy: 'ALWAYS',
+                    // results: [[path: "${allureResultsPath}"]]
+                }
+                echo "Allure reports have been generated successfully."
+
+                // Set Build Status to Success as all elements have ran successfully
+                currentBuild.result = 'SUCCESS'
+            }
+        }
+    }
+}
+
+//  Generate Allure report dynamically for each pack/sub-pack //- UNCOMMENT SECTION AFTER AZURE CLI TOOLS ADDED TO WORKER NODE
+def generateAllureReport(allureResultsPath, reportName) {
+    def reportDir = "target/${reportName}_Tests/allure-report"
+    echo "generateAllureReport ( ${allureResultsPath}, ${reportName})"
+    sh "allure generate ${allureResultsPath} -o ${reportDir} --clean"
+    echo "Allure Report Generation Finished"
+
+    def reportLink = """<a 
+    href='${env.BUILD_URL}execution/node/3/ws/${reportDir}/index.html'>${reportName} Allure Report </a>"""
+
+    def formattedDescription = """
+        <h3>${reportName} Test Report </h3>
+        <p>Pack/Sub-Pack: ${reportName}</p>
+        <p>${reportLink}</p>
+    """
+
+    currentBuild.description += formattedDescription
+
+    // Add clickable report link to Jenkins overview
+    // summary.addSection([
+    //     type: "TEST",
+    //     name: "${reportName} Allure Report",
+    //     link: "${env.BUILD_URL}artifact/${reportDir}/index.html"
+    //])
+}
+
+//  Add the test summary to Jenkins Overview Page
+def addSummaryToJenkins(resultsMap) {
+    def summaryHTML = """
+        <html>
+        <style>
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #4CAF50; color: white; }
+        </style>
+        <body>
+        <h3>Test Summary for ${env.JOB_NAME} Build #${env.BUILD_NUMBER}</h3>
+        <table>
+            <tr>
+                <th>Test Pack</th>
+                <th>Passed</th>
+                <th>Failed</th>
+                <th>Broken</th>
+                <th>Skipped</th>
+            </tr>
+        """
+    
+
+    resultsMap.each { pack, summary ->
+        summaryHTML += """
+            <tr>
+                <td>${pack}</td>
+                <td>${summary.passed}</td>
+                <td>${summary.failed}</td>
+                <td>${summary.broken}</td>
+                <td>${summary.skipped}</td>
+            </tr>
+        """
+    }
+    summaryHTML += """</table>"""
+
+    currentBuild.description = summaryHTML
+}
+
+def sendSummaryEmail(resultsMap) {
+    if (resultsMap.isEmpty()) {
+        echo "No test results to send, skipping email."
+        return
+        }
+
+    def emailSubject = """Test Execution Summary - ${env.JOB_NAME}"""
+
+    // Build the email content
+    def emailBody = """
+        <!DOCTYPE html>
+        <html>
+        <style>
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #4CAF50; color: white; }
+        </style>
+        <body>
+        <h3>Test Summary for ${env.JOB_NAME} Build #${env.BUILD_NUMBER}</h3>
+        <p>The below table details the results of the build ran from the ${params.BRANCH} branch, in the ${params.TEST_ENVIRONMENT} Environment using ${params.EXEC_THREADS} Parralel Processes</p>
+        <table>
+            <tr>
+                <th>Test Pack</th>
+                <th>Passed</th>
+                <th>Failed</th>
+                <th>Broken</th>
+                <th>Skipped</th>
+            </tr>
+        """
+    
+
+    resultsMap.each { pack, summary ->
+        emailBody += """
+            <tr>
+                <td>${pack}</td>
+                <td>${summary.passed}</td>
+                <td>${summary.failed}</td>
+                <td>${summary.broken}</td>
+                <td>${summary.skipped}</td>
+            </tr>
+        """
+    }
+    emailBody += """
+        </table>
+        <p>For more information on the run execution please see the Jenkins Page for the Allure report links on there:</p>
+        <ul>
+            <li><a href="https://jenkins-ta.boigroup.net/job/EDW/job/Pytest-BDD-Test-Framework/${env.BUILD_NUMBER}/">Jenkins </a></li>
+        </ul>
+        <p>Kind Regards,Test Team</p>
+        </body>
+        </html>        
+    """
+
+    // Send email using Jenkins mail step
+    emailext(
+    subject: emailSubject,
+    body: emailBody,
+    to: "${EMAIL_TO}",
+    mimeType: 'text/html'
+    )
+
+    echo "Summary email sent to ${EMAIL_TO}"
+
+    }    
