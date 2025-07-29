@@ -5,7 +5,7 @@ pipeline {
     parameters {
         string(name: 'TEST_PACKS', defaultValue: '', description: 'Comma-separated list of test packs to run')
         string(name: 'SUB_PACKS', defaultValue: '', description: 'Comma-separated list of sub-packs to run independently, e.g')
-        string(name: 'TEST_ENVIRONMENT', defaultValue: 'R1', description: 'Name of Test Environment')
+        string(name: 'TEST_ENVIRONMENT', defaultValue: 't', description: 'Name of Test Environment')
         choice(name: 'EXEC_THREADS', choices: ['1','2','3','4','5','6','7','8','9','10'], description: 'Number of Parralel Threads')
         string(name: 'BRANCH', defaultValue: 'develop', description: 'Name of Branch (Case Sensitive), default is develop')
     }
@@ -14,9 +14,9 @@ pipeline {
     environment {
         BASE_DIR = 'tests'  // Base directory for all test packs
         EMAIL_TO = 'your email here'
-        TERADATA_HOST = 'tdprep01'
-        TDWALLET_USERNAME = 'DEVOPS_USR_PP_1'
-        TDWALLET_PASSWORD = '$$tdwallet(DEVOPS_USR_PP_1_p)'
+        TERADATA_HOST = 'test'
+        TDWALLET_USERNAME = 'tt'
+        TDWALLET_PASSWORD = '$$tdwallet(tt)'
         JENKINS_RUN = "True"
         JAVA_HOME = "C:/Program Files/Java/jdk1.8.0_151"
     }
@@ -71,10 +71,10 @@ pipeline {
                 sh 'python3102 --version'
 
                 echo '... Create virtual environment'
-                sh 'python3102 -m venv pytest-bdd-venv'
+                sh 'python3102 -m venv pytest_git'
 
                 echo '... Activate the virtual environment'
-                sh 'pytest-bdd-venv/Scripts/activate.bat'
+                sh 'pytest_git/Scripts/activate.bat'
 
                 echo '... Upgrade pip if necessary'
                 sh 'python3102 -m pip install --upgrade pip --user'

@@ -9,4 +9,4 @@ Feature: For testname
 
     Examples:
       | tst_cd	| data_entity   | proc_typ_cd 	| sql_query | p_n|
-      |test		|test			|test			|test.sql	|test|
+      | test	| test			|test			|test.sql	|test|

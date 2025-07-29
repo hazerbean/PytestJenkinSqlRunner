@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import pytest, os, re, allure
 import pandas as pd
 
-scenarios('../features/<FEATURE_FILE_NAME>.feature')
+scenarios('../features/test.feature')
 load_dotenv()
 dbHelper = TeradataHelper(host=os.getenv('TERADATA_HOST'), user=cc.decrypt_credential(os.getenv('TERADATA_USERNAME')), password=cc.decrypt_credential(os.getenv('TERADATA_PASSWORD')))
 logger = customlogger.custom_logger()
@@ -20,7 +20,7 @@ def establish_connection():
     conn = dbHelper.connect()
     return conn
     
-# The Make as many  instances are there are data element to check on the feature file 
+# The Make as many  instances are there are data element names to check on the feature file 
 @given(parsers.cfparse("Data in the {<DataElementToCheck>} exists with the above Criteria"), target_fixture='conn')
 def establish_connection(DataElementToCheck):
     table_name=DataElementToCheck
@@ -33,7 +33,7 @@ def establish_connection(DataElementToCheck):
 
 @when(parsers.cfparse("The {sql_query} written to validate the above Criteria is executed"), target_fixture='result')
 def result(sql_query, params):
-    sql_file_path = helpers.find_file(sql_query, 'tests/<E2E_AREA_NAME>/<TEMPLATE_NAME>/sql')
+    sql_file_path = helpers.find_file(sql_query, 'tests/package_example/step_defs/sql')
 
     assert os.path.exists(sql_file_path), f"FileNotFound The File Specified at the path {sql_file_path} does not exist"
     with open(os.path.abspath(sql_file_path)) as sql_file:

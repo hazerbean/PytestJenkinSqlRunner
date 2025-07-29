@@ -4,7 +4,7 @@ SELECT'%TST_CD' AS Test_Cd,
 'FAIL' AS Test_Sql_Status
 FROM
   (SELECT (CASE
-               WHEN COUNT(1) = 0 THEN 'Pass'
+               WHEN COUNT(1) = 0 THEN 'PASS'
                ELSE 'FAIL'
            END) AS tst_Result
    FROM
