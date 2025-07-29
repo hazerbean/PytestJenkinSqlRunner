@@ -44,7 +44,7 @@ def test_result_plugin(pytestconfig):
 
 # Pytest-BDD hook to write environment details before each scenario
 def pytest_bdd_before_scenario(request, feature, scenario):
-    test_pack = "SVOC_Tests"
+    test_pack = "package_example"
 
     source_base = os.path.join("tests", test_pack)
     target_base = os.path.join("target", test_pack)

@@ -21,7 +21,7 @@ def establish_connection():
     return conn
     
 # The Make as many  instances are there are data element names to check on the feature file 
-@given(parsers.cfparse("Data in the {<DataElementToCheck>} exists with the above Criteria"), target_fixture='conn')
+@given(parsers.cfparse("Data in the {data_entity} exists with the above Criteria"), target_fixture='conn')
 def establish_connection(DataElementToCheck):
     table_name=DataElementToCheck
     database_name = os.environ.get("DB_ENV")
@@ -48,7 +48,7 @@ def result(sql_query, params):
 
     return result 
 
-@then(parsers.cfparse("The query result returns as PASS, validating that the Breach flags and associated dates are set correctly for Days Past Due"))
+@then(parsers.cfparse("The testname No rows are returned"))
 def assert_result(result, params):
 
     dbHelper.close_connection()
